@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Presensi Digital - SDN GONDANG 1</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f8fafc;
+        }
+
+        .hidden-input { display: none; }
+
+        .student-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .student-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            filter: brightness(1.05);
+        }
+
+        .photo-container {
+            position: relative;
+            cursor: pointer;
+            z-index: 10;
+        }
+        .photo-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s;
+            border-radius: 9999px;
+            pointer-events: none;
+        }
+        .photo-container:hover.photo-overlay {
+            opacity: 1;
+        }
+
+        .animate-pop {
+            animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes pop {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .stat-card {
+            transition: all 0.2s;
+            cursor: pointer;
+            min-width: 80px;
+            padding: 8px;
+            border-radius: 16px;
+        }
+        .stat-card.active-filter {
+            background-color: #f0f9ff;
+            border: 2px solid #3b82f6;
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 100%;
+            background: white;
+            min-width: 200px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            border-radius: 1rem;
+            z-index: 50;
+            border: 1px solid #f1f5f9;
+            overflow: hidden;
+        }
+
+        .dropdown:hover.dropdown-content {
+            display: block;
+        }
+
+        .table-container {
+            max-height: 60vh;
+            overflow: auto;
+        }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        [contenteditable="true"]:hover {
+            background: rgba(255,255,255,0.1);
+            outline: 1px dashed rgba(255,255,255,0.5);
+            border-radius: 4px;
+        }
+        [contenteditable="true"]:focus {
+            background: rgba(255,255,255,0.2);
+            outline: 2px solid #fbbf24;
+            border-radius: 4px;
+            padding: 0 4px;
+        }
+
+        #mainHeader {
+            background-size: cover;
+            background-position: center;
+        }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <input type="file" id="studentPhotoInput" accept="image/*" class="hidden-input">
+
+    <input type="file" id="headerBgInput" accept="image/*" class="hidden-input" onchange="handleHeaderBgUpload(this)">
+    <div id="mainHeader" class="relative bg-gradient-to-br from-blue-700 to-blue-900 text-white shadow-xl transition-all duration-500 overflow-hidden group">
+        <div id="headerOverlay" class="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px] z-0"></div>
+        
+        <div class="absolute top-4 right-4 z-30 opacity-0 group-hover:opacity-100 transition-opacity bg-white/20 backdrop-blur-md p-3 rounded-2xl border border-white/30 flex flex-col gap-2">
+            <button onclick="document.getElementById('headerBgInput').click()" class="bg-white text-blue-900 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 hover:bg-blue-50">
+                <i class="fas fa-image"></i> Ganti Gambar
+            </button>
+            <div class="flex flex-col gap-1">
+                <label class="text-[8px] font-black uppercase text-white/80">Gelap</label>
+                <input type="range" min="0" max="100" value="40" class="w-24 h-1 bg-white/30 rounded-lg appearance-none cursor-pointer accent-white" oninput="adjustHeaderOverlay(this.value)">
+            </div>
+            <div class="flex flex-col gap-1">
+                <label class="text-[8px] font-black uppercase text-white/80">Blur</label>
+                <input type="range" min="0" max="10" value="2" class="w-24 h-1 bg-white/30 rounded-lg appearance-none cursor-pointer accent-white" oninput="adjustHeaderBlur(this.value)">
+            </div>
+        </div>
+
+        <div class="container mx-auto px-4 py-8 md:py-12 relative z-10 text-center sm:text-left">
+            <div class="flex flex-col sm:flex-row items-center gap-6">
+                <input type="file" id="logoInput" accept="image/*" class="hidden-input" onchange="handleLogoUpload(this)">
+                <div class="bg-white/10 backdrop-blur-md p-1 rounded-3xl w-24 h-24 md:w-28 md:h-28 flex-shrink-0 flex items-center justify-center border border-white/20 cursor-pointer hover:bg-white/20 transition-all" onclick="document.getElementById('logoInput').click()">
+                    <img id="schoolLogo" src="https://via.placeholder.com/150?text=LOGO" alt="Logo" class="w-full h-full object-contain rounded-2xl">
+                </div>
+                <div>
+                    <span class="text-blue-200 text-xs md:text-sm font-bold tracking-[0.2em] uppercase mb-1 block">SISTEM PRESENSI KELAS</span>
+                    <h1 class="text-2xl md:text-4xl font-black uppercase tracking-tight leading-none">SD NEGERI GONDANG 1</h1>
+                    <div class="flex flex-wrap justify-center sm:justify-start gap-2 mt-3">
+                        <span class="bg-yellow-400 text-blue-900 px-3 py-1 rounded-lg font-bold text-xs uppercase tracking-wider">KELAS 5A</span>
+                        <div class="flex items-center gap-1 text-blue-100 text-xs font-medium uppercase opacity-90 self-center">
+                            <span>Wali Kelas:</span>
+                            <span contenteditable="true" id="teacherName" class="cursor-text px-1 transition-all">S. BAYU KRISNANTO, S.I.P., S.Pd., Gr.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mx-auto px-4 -mt-8 relative z-20">
+        <div class="bg-white rounded-[2rem] shadow-2xl p-4 flex flex-col xl:flex-row gap-4 items-center justify-between border border-slate-100">
+            <div class="flex flex-wrap items-center gap-4 w-full xl:w-auto justify-center">
+                <div class="flex items-center gap-3 bg-gradient-to-r from-blue-50 to-indigo-50 p-3 rounded-2xl border border-blue-100 shadow-sm">
+                    <div class="bg-blue-600 text-white w-10 h-10 rounded-xl flex items-center justify-center text-lg shadow-md shadow-blue-200"><i class="fas fa-calendar-alt"></i></div>
+                    <div class="flex flex-col">
+                        <span id="dayLabel" class="text-[10px] font-black text-blue-600 uppercase leading-none ml-1 mb-1 tracking-wider">SENIN</span>
+                        <input type="date" id="datePicker" class="bg-transparent font-black text-slate-800 focus:outline-none cursor-pointer text-sm">
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 bg-gradient-to-r from-pink-50 to-rose-50 p-3 rounded-2xl border border-rose-100 shadow-sm">
+                    <div class="bg-rose-500 text-white w-10 h-10 rounded-xl flex items-center justify-center text-lg shadow-md shadow-rose-200"><i class="fas fa-clock"></i></div>
+                    <div class="flex flex-col">
+                        <span class="text-[10px] font-black text-rose-600 uppercase leading-none ml-1 mb-1 tracking-wider">WAKTU</span>
+                        <div id="realtimeClock" class="text-sm font-mono font-black text-slate-800 bg-white/50 px-2 py-0.5 rounded-lg border border-rose-200/50">00:00:00</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap justify-center gap-0.5">
+                <div class="stat-card text-center active-filter" id="filterTotal" onclick="setFilter('Total')">
+                    <p id="countTotal" class="text-lg font-black text-slate-800">0</p>
+                    <p class="text-[8px] uppercase font-bold text-slate-400">Total Siswa</p>
+                </div>
+                <div class="stat-card text-center" id="filterHadir" onclick="setFilter('Hadir')">
+                    <p id="countHadir" class="text-lg font-black text-emerald-500">0</p>
+                    <p class="text-[8px] uppercase font-bold text-slate-400">Hadir</p>
+                </div>
+                <div class="stat-card text-center" id="filterTerlambat" onclick="setFilter('Terlambat')">
+                    <p id="countLambat" class="text-lg font-black text-rose-500">0</p>
+                    <p class="text-[8px] uppercase font-bold text-slate-400">Terlambat</p>
+                </div>
+                <div class="stat-card text-center" id="filterIzin" onclick="setFilter('Izin')">
+                    <p id="countIzin" class="text-lg font-black text-blue-500">0</p>
+                    <p class="text-[8px] uppercase font-bold text-slate-400">Izin</p>
+                </div>
+                <div class="stat-card text-center" id="filterSakit" onclick="setFilter('Sakit')">
+                    <p id="countSakit" class="text-lg font-black text-amber-500">0</p>
+                    <p class="text-[8px] uppercase font-bold text-slate-400">Sakit</p>
+                </div>
+                <div class="stat-card text-center" id="filterAlpa" onclick="setFilter('Alpa')">
+                    <p id="countAlpa" class="text-lg font-black text-slate-400">0</p>
+                    <p class="text-[8px] uppercase font-bold text-slate-400">Alpa</p>
+                </div>
+                <div class="stat-card text-center" id="filterBelum" onclick="setFilter('Belum')">
+                    <p id="countBelum" class="text-lg font-black text-indigo-400">0</p>
+                    <p class="text-[8px] uppercase font-bold text-slate-400">Belum Absen</p>
+                </div>
+            </div>
+
+            <div class="flex gap-2 w-full xl:w-auto">
+                <div class="relative dropdown flex-1 xl:flex-none">
+                    <button class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold px-4 py-3 rounded-2xl text-xs transition-all flex items-center justify-center gap-2">
+                        <i class="fas fa-list-check"></i> REKAP
+                    </button>
+                    <div class="dropdown-content">
+                        <button onclick="viewRecap('daily')" class="w-full text-left px-4 py-3 hover:bg-slate-50 text-xs font-bold text-slate-700 border-b flex items-center gap-3"><i class="fas fa-calendar-day text-blue-500"></i> Rekap Harian</button>
+                        <button onclick="viewRecap('monthly')" class="w-full text-left px-4 py-3 hover:bg-slate-50 text-xs font-bold text-slate-700 flex items-center gap-3"><i class="fas fa-calendar-alt text-purple-500"></i> Rekap Bulanan</button>
+                    </div>
+                </div>
+                <div class="relative dropdown flex-1 xl:flex-none">
+                    <button class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-3 rounded-2xl text-xs transition-all flex items-center justify-center gap-2">
+                        <i class="fas fa-download"></i> EXPORT
+                    </button>
+                    <div class="dropdown-content">
+                        <button onclick="downloadAction('daily')" class="w-full text-left px-4 py-3 hover:bg-slate-50 text-xs font-bold text-slate-700 border-b flex items-center gap-3"><i class="fas fa-file-excel text-emerald-500"></i> Excel Harian</button>
+                        <button onclick="downloadAction('monthly')" class="w-full text-left px-4 py-3 hover:bg-slate-50 text-xs font-bold text-slate-700 flex items-center gap-3"><i class="fas fa-file-excel text-amber-500"></i> Excel Bulanan</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mx-auto px-4 py-8">
+        <div id="studentGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"></div>
+    </div>
+
+    <div id="attendanceModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-[2.5rem] shadow-2xl p-6 md:p-8 w-full max-w-md animate-pop">
+            <div class="text-center mb-6">
+                <div class="w-20 h-20 mx-auto rounded-full bg-slate-100 p-1 mb-3">
+                    <img id="modalStudentPhoto" src="" class="w-full h-full object-cover rounded-full">
+                </div>
+                <h3 id="modalStudentName" class="text-lg font-black text-slate-800 uppercase leading-tight">NAMA SISWA</h3>
+                <p id="modalStudentNisn" class="text-xs font-bold text-slate-400 mt-1">NISN: 00000000</p>
+                <div id="currentStatusBadge" class="mt-3 hidden">
+                    <span id="badgeSpan" class="px-3 py-1 rounded-full text-[10px] font-bold border uppercase"></span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mb-6">
+                <button onclick="triggerHadirLogic()" class="col-span-2 flex items-center justify-center p-5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-3xl transition-all group shadow-sm">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-lg"><i class="fas fa-check"></i></div>
+                        <div class="text-left">
+                            <span class="block text-sm font-black text-emerald-700 uppercase">Hadir Sekarang</span>
+                            <span class="block text-[9px] font-bold text-emerald-500 uppercase tracking-wider">Otomatis deteksi waktu</span>
+                        </div>
+                    </div>
+                </button>
+                <button onclick="selectStatus('Izin')" class="flex flex-col items-center justify-center p-4 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-3xl transition-all">
+                    <i class="fas fa-envelope text-xl text-blue-500 mb-2"></i>
+                    <span class="text-[10px] font-black text-blue-700 uppercase">Izin</span>
+                </button>
+                <button onclick="selectStatus('Sakit')" class="flex flex-col items-center justify-center p-4 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-3xl transition-all">
+                    <i class="fas fa-hospital text-xl text-amber-500 mb-2"></i>
+                    <span class="text-[10px] font-black text-amber-700 uppercase">Sakit</span>
+                </button>
+                <button onclick="selectStatus('Alpa')" class="col-span-2 flex items-center justify-center p-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-3xl transition-all">
+                    <i class="fas fa-times-circle text-lg text-slate-400 mr-3"></i>
+                    <span class="text-[10px] font-black text-slate-500 uppercase">Alpa</span>
+                </button>
+            </div>
+
+            <div id="reasonArea" class="hidden mb-6">
+                <label id="reasonLabel" class="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Keterangan / Alasan</label>
+                <textarea id="attendanceReason" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 focus:border-blue-500 focus:outline-none transition-all text-sm" rows="3" placeholder="Tulis alasan di sini..."></textarea>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="closeAttendanceModal()" class="flex-1 py-4 font-bold text-slate-400 text-sm">Batal</button>
+                <button onclick="confirmAttendance()" class="flex-1 py-4 bg-blue-600 text-white font-bold rounded-2xl shadow-lg shadow-blue-200 text-sm">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="recapModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-[2rem] shadow-2xl p-6 md:p-8 w-full max-w-5xl animate-pop overflow-hidden flex flex-col h-[90vh]">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h2 id="recapModalTitle" class="text-xl font-black text-slate-800 uppercase">Rekap Presensi</h2>
+                    <p id="recapModalSub" class="text-[10px] text-slate-500 font-bold uppercase tracking-widest"></p>
+                </div>
+                <button onclick="closeRecapModal()" class="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 hover:text-rose-500 transition flex items-center justify-center"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="table-container border border-slate-100 rounded-2xl bg-slate-50 flex-1">
+                <table class="w-full text-left border-collapse bg-white min-w-max">
+                    <thead id="recapTableHeader" class="sticky top-0 bg-slate-800 text-white text-[9px] uppercase font-black z-20"></thead>
+                    <tbody id="recapTableBody" class="text-[10px] font-bold text-slate-600"></tbody>
+                </table>
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button onclick="closeRecapModal()" class="px-8 py-3 bg-slate-100 text-slate-500 font-black rounded-xl text-xs">TUTUP</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const rawStudentData = [
+            { name: "ADNAN INGGIL PANULUH", nisn: "0145474986" }, { name: "AKBAR NURDAFFA PRATAMA", nisn: "0147224592" },
+            { name: "ALFIIAN RISQIE SUTARNO", nisn: "0148727953" }, { name: "ALFIANO PUTRA PRIMATRISDA", nisn: "3159322554" },
+            { name: "ALIFA HILMAWATI JISWA", nisn: "0148323066" }, { name: "ALMAZ HILBRAM ANKA FAIZULLAH", nisn: "0132321709" },
+            { name: "ALVARO RASYA PRATAMA", nisn: "0142887576" }, { name: "ANNISA JOVITA MAHARANI", nisn: "0143028709" },
+            { name: "AQILA TALITA ZAHRAN", nisn: "0157830756" }, { name: "ARKA IZZUDDIEN", nisn: "0149954952" },
+            { name: "ARLONSY AL AYUBI", nisn: "0143897552" }, { name: "ARYA ALVARO", nisn: "0147759540" },
+            { name: "ASHZAHWA OLIVAINE RIYANANDITA ADZRA", nisn: "0149517099" }, { name: "AZZIRA SHAFANAS IQMA", nisn: "0143397456" },
+            { name: "DAHLAN ZAINUL ARIFIN", nisn: "0146590907" }, { name: "DANISH ALI RABBANI", nisn: "0157235076" },
+            { name: "DANISH KEENAN PURWOKO", nisn: "0156900968" }, { name: "DAREEN GAVRIEL PRADIPTA", nisn: "3151626844" },
+            { name: "DELISHA FAUZI KHOIRUNISYA", nisn: "0149366871" }, { name: "FAHREZA DZAKIY PRATAMA", nisn: "0142234259" },
+            { name: "FIRDAN ARRAZKA", nisn: "0145684774" }, { name: "FRANSISKA RAHADATUL 'AISY", nisn: "0149404210" },
+            { name: "GANESSA ARDITHYA SYAH", nisn: "0146737254" }, { name: "GANEZ DIAS ALZAHIR", nisn: "0155176636" },
+            { name: "GHANIYA ZALFA WIJANARKO", nisn: "0144142614" }, { name: "KENZO ALIANDO", nisn: "0158499924" },
+            { name: "KHARISA NAILLA BALQIS", nisn: "0148810085" }, { name: "KENJIRO UMAR LEE WIJAYA", nisn: "0143684935" },
+            { name: "AINUN FAHRIYAH YULFA", nisn: "0149195650" }
+        ];
+
+        const cardColors = [
+            "bg-blue-50 border-blue-100", "bg-emerald-50 border-emerald-100", "bg-amber-50 border-amber-100",
+            "bg-rose-50 border-rose-100", "bg-purple-50 border-purple-100", "bg-sky-50 border-sky-100",
+            "bg-orange-50 border-orange-100", "bg-indigo-50 border-indigo-100", "bg-teal-50 border-teal-100",
+            "bg-pink-50 border-pink-100"
+        ];
+
+        let attendanceData = {};
+        let activeFilter = 'Total';
+        let currentStudentIdx = null;
+        let selectedStatusTemp = null;
+        let studentForPhotoUpload = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initClock();
+            initDate();
+            loadAttendance();
+            loadTeacherName();
+            loadHeaderSettings();
+            renderGrid();
+            initPhotoUpload();
+            initTeacherEdit();
+        });
+
+        function initClock() {
+            setInterval(() => {
+                const clockEl = document.getElementById('realtimeClock');
+                if (clockEl) clockEl.textContent = new Date().toLocaleTimeString('id-ID', { hour12: false });
+            }, 1000);
+        }
+
+        function initDate() {
+            const dp = document.getElementById('datePicker');
+            const today = new Date().toISOString().split('T')[0];
+            dp.value = today;
+            updateDayLabel(today);
+            dp.onchange = () => { updateDayLabel(dp.value); renderGrid(); };
+        }
+
+        function updateDayLabel(dateString) {
+            const days = ['Minggu', 'Senin','Selasa', 'Rabu','Kamis', 'Jumat','Sabtu'];
+            const date = new Date(dateString);
+            document.getElementById('dayLabel').textContent = days[date.getDay()];
+        }
+
+        function getDateKey() { return document.getElementById('datePicker').value; }
+        function loadAttendance() { const s = localStorage.getItem('attendanceData5A_v2'); if (s) attendanceData = JSON.parse(s); }
+        function saveAttendance() { localStorage.setItem('attendanceData5A_v2',JSON.stringify(attendanceData)); }
+
+        function initTeacherEdit() {
+            const t = document.getElementById('teacherName');
+            t.addEventListener('blur', () => localStorage.setItem('teacherName5A', t.textContent.trim()));
+            t.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); t.blur(); } });
+        }
+
+        function loadTeacherName() {
+            const n = localStorage.getItem('teacherName5A');
+            if (n) document.getElementById('teacherName').textContent = n;
+        }
+
+        function adjustHeaderOverlay(val) {
+            document.getElementById('headerOverlay').style.backgroundColor = `rgba(15, 23, 42, ${val/100})`;
+            localStorage.setItem('headerOverlayVal', val);
+        }
+
+        function adjustHeaderBlur(val) {
+            document.getElementById('headerOverlay').style.backdropFilter = `blur(${val}px)`;
+            localStorage.setItem('headerBlurVal', val);
+        }
+
+        function loadHeaderSettings() {
+            const bg = localStorage.getItem('headerBg');
+            const logo = localStorage.getItem('schoolLogo');
+            const overlay = localStorage.getItem('headerOverlayVal');
+            const blur = localStorage.getItem('headerBlurVal');
+            if(bg) document.getElementById('mainHeader').style.backgroundImage = `url('${bg}')`;
+            if(logo) document.getElementById('schoolLogo').src = logo;
+            if(overlay) {
+                document.getElementById('headerOverlay').style.backgroundColor = `rgba(15, 23, 42, ${overlay/100})`;
+                document.querySelector('input[oninput="adjustHeaderOverlay(this.value)"]').value = overlay;
+            }
+            if(blur) {
+                document.getElementById('headerOverlay').style.backdropFilter = `blur(${blur}px)`;
+                document.querySelector('input[oninput="adjustHeaderBlur(this.value)"]').value = blur;
+            }
+        }
+
+        function handleHeaderBgUpload(i) {
+            if(i.files[0]) {
+                const r = new FileReader();
+                r.onload = (e) => {
+                    document.getElementById('mainHeader').style.backgroundImage = `url('${e.target.result}')`;
+                    localStorage.setItem('headerBg', e.target.result);
+                };
+                r.readAsDataURL(i.files[0]);
+            }
+        }
+
+        function handleLogoUpload(i) {
+            if(i.files[0]) {
+                const r = new FileReader();
+                r.onload = (e) => {
+                    document.getElementById('schoolLogo').src = e.target.result;
+                    localStorage.setItem('schoolLogo', e.target.result);
+                };
+                r.readAsDataURL(i.files[0]);
+            }
+        }
+
+        // FUNGSI BARU: Kompresi Gambar Siswa agar memori cukup untuk 29 orang
+        function initPhotoUpload() {
+            const input = document.getElementById('studentPhotoInput');
+            input.onchange = (e) => {
+                if (e.target.files && e.target.files[0] && studentForPhotoUpload) {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            const MAX_WIDTH = 200; // Ukuran kecil untuk avatar
+                            const scaleSize = MAX_WIDTH / img.width;
+                            canvas.width = MAX_WIDTH;
+                            canvas.height = img.height * scaleSize;
+
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                            // Kompresi ke JPEG kualitas 0.7
+                            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                            
+                            try {
+                                localStorage.setItem(`photo_${studentForPhotoUpload}`, compressedBase64);
+                                renderGrid();
+                            } catch (err) {
+                                alert("Memori browser penuh. Silakan bersihkan data atau gunakan foto lain.");
+                            }
+                            
+                            studentForPhotoUpload = null;
+                            input.value = '';
+                        };
+                        img.src = ev.target.result;
+                    };
+                    reader.readAsDataURL(e.target.files[0]);
+                }
+            };
+        }
+
+        function triggerPhotoUpload(nisn) { 
+            studentForPhotoUpload = nisn; 
+            document.getElementById('studentPhotoInput').click();
+        }
+
+        function renderGrid() {
+            const grid = document.getElementById('studentGrid');
+            grid.innerHTML = '';
+            const key = getDateKey();
+            const today = attendanceData[key] || {};
+            let stats = { Hadir: 0,Terlambat: 0,Izin: 0,Sakit: 0,Alpa: 0 };
+
+            rawStudentData.forEach((s, idx) => {
+                const res = today[idx];
+                if(res) stats[res.status]++;
+                const effectiveStatus = res ? res.status : 'Belum';
+                if(activeFilter !== 'Total' && effectiveStatus !== activeFilter) return;
+
+                const colorClass = cardColors[idx % cardColors.length];
+                const card = document.createElement('div');
+                card.className = `student-card ${colorClass} rounded-3xl p-4 border flex flex-col items-center text-center animate-pop`;
+                const photoSrc = localStorage.getItem(`photo_${s.nisn}`)
+                    || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=ffffff&color=64748b&size=200`;
+
+                let statusBadge = '<span class="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Klik Absen</span>';
+                if(res) {
+                    const badgeColor = res.status === 'Hadir' ? 'bg-emerald-500 text-white' : (res.status === 'Terlambat' ? 'bg-rose-500 text-white' : (res.status === 'Izin' ? 'bg-blue-500 text-white' : (res.status === 'Sakit' ? 'bg-amber-500 text-white' : 'bg-slate-400 text-white')));
+                    statusBadge = `<span class="px-2 py-1 ${badgeColor} rounded-lg text-[8px] font-black uppercase shadow-sm">${res.status}</span>`;
+                }
+
+                card.innerHTML = `
+                    <div class="photo-container w-16 h-16 rounded-full bg-white p-1 mb-3 shadow-sm" onclick="event.stopPropagation(); triggerPhotoUpload('${s.nisn}')">
+                        <img src="${photoSrc}" class="w-full h-full object-cover rounded-full">
+                        <div class="photo-overlay"><i class="fas fa-camera text-white text-xs"></i></div>
+                    </div>
+                    <div class="cursor-pointer w-full" onclick="openAttendanceModal(${idx})">
+                        <h4 class="text-[10px] font-black text-slate-800 uppercase leading-tight mb-1">${s.name}</h4>
+                        <p class="text-[8px] font-bold text-slate-500">${s.nisn}</p>
+                        <div class="mt-3">${statusBadge}</div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+
+            document.getElementById('countTotal').textContent = rawStudentData.length;
+            document.getElementById('countHadir').textContent = stats.Hadir;
+            document.getElementById('countLambat').textContent = stats.Terlambat;
+            document.getElementById('countIzin').textContent = stats.Izin;
+            document.getElementById('countSakit').textContent = stats.Sakit;
+            document.getElementById('countAlpa').textContent = stats.Alpa;
+            const b = rawStudentData.length - (stats.Hadir + stats.Terlambat + stats.Izin + stats.Sakit + stats.Alpa);
+            document.getElementById('countBelum').textContent = b >= 0 ? b : 0;
+        }
+
+        function triggerHadirLogic() {
+            const n = new Date();
+            if (n.getHours() < 7 || (n.getHours() ===7 && n.getMinutes() === 0)) selectStatus('Hadir');
+            else selectStatus('Terlambat');
+        }
+
+        function openAttendanceModal(idx) {
+            currentStudentIdx = idx;
+            const s = rawStudentData[idx];
+            const r = attendanceData[getDateKey()]?.[idx];
+            document.getElementById('modalStudentName').textContent = s.name;
+            document.getElementById('modalStudentNisn').textContent = `NISN: ${s.nisn}`;
+            document.getElementById('modalStudentPhoto').src = localStorage.getItem(`photo_${s.nisn}`)
+                || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=f1f5f9&color=64748b&size=200`;
+            const b = document.getElementById('currentStatusBadge'), bs = document.getElementById('badgeSpan');
+            if(r) {
+                b.classList.remove('hidden');
+                bs.textContent = `Status: ${r.status} (${r.time})`;
+                bs.className = `px-3 py-1 ${r.status==='Hadir'?'bg-emerald-50 text-emerald-600 border-emerald-100':r.status==='Terlambat'?'bg-rose-50 text-rose-600 border-rose-100':'bg-blue-50 text-blue-600 border-blue-100'} rounded-full text-[10px] font-bold border uppercase`;
+                document.getElementById('attendanceReason').value = r.reason || '';
+            } else { b.classList.add('hidden'); document.getElementById('attendanceReason').value = ''; }
+            selectedStatusTemp = r ? r.status : null;
+            toggleReasonArea(selectedStatusTemp);
+            document.getElementById('attendanceModal').classList.remove('hidden');
+        }
+
+        function closeAttendanceModal() { document.getElementById('attendanceModal').classList.add('hidden'); }
+        function selectStatus(s) { selectedStatusTemp = s; toggleReasonArea(s); }
+        function toggleReasonArea(s) {
+            const a = document.getElementById('reasonArea'), l = document.getElementById('reasonLabel');
+            if(s && s !== 'Hadir' && s !== 'Alpa') { a.classList.remove('hidden'); l.textContent = s === 'Terlambat' ? 'Alasan Terlambat' : 'Keterangan'; }
+            else { a.classList.add('hidden'); document.getElementById('attendanceReason').value = ''; }
+        }
+
+        function confirmAttendance() {
+            if(!selectedStatusTemp)return;
+            const k = getDateKey(); if(!attendanceData[k]) attendanceData[k] = {};
+            attendanceData[k][currentStudentIdx] = { 
+                status: selectedStatusTemp, 
+                time: new Date().toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', hour12:false }), 
+                reason: document.getElementById('attendanceReason').value 
+            };
+            saveAttendance(); renderGrid(); closeAttendanceModal();
+        }
+
+        function setFilter(f) {
+            activeFilter = f;
+            document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active-filter'));
+            document.getElementById('filter' + f).classList.add('active-filter');
+            renderGrid();
+        }
+
+        // Fitur Tambahan Rekap dan Export (Opsional untuk fungsionalitas penuh)
+        function viewRecap(type) {
+            const modal = document.getElementById('recapModal');
+            const header = document.getElementById('recapTableHeader');
+            const body = document.getElementById('recapTableBody');
+            const title = document.getElementById('recapModalTitle');
+            const sub = document.getElementById('recapModalSub');
+            
+            modal.classList.remove('hidden');
+            body.innerHTML = '';
+
+            if(type === 'daily') {
+                const key = getDateKey();
+                title.textContent = "Rekap Harian";
+                sub.textContent = key;
+                header.innerHTML = `<tr><th class="p-4">No</th><th class="p-4">Nama</th><th class="p-4">Status</th><th class="p-4">Waktu</th><th class="p-4">Alasan</th></tr>`;
+                
+                rawStudentData.forEach((s, idx) => {
+                    const r = (attendanceData[key] || {})[idx] || { status: '-', time: '-', reason: '-' };
+                    body.innerHTML += `<tr class="border-b hover:bg-slate-50"><td class="p-4">${idx+1}</td><td class="p-4">${s.name}</td><td class="p-4">${r.status}</td><td class="p-4">${r.time}</td><td class="p-4">${r.reason || '-'}</td></tr>`;
+                });
+            } else {
+                title.textContent = "Rekap Bulanan (Ringkasan)";
+                sub.textContent = "Data terkumpul di memori";
+                header.innerHTML = `<tr><th class="p-4">No</th><th class="p-4">Nama</th><th class="p-4 text-emerald-500">H</th><th class="p-4 text-rose-500">T</th><th class="p-4 text-blue-500">I</th><th class="p-4 text-amber-500">S</th><th class="p-4 text-slate-400">A</th></tr>`;
+                
+                rawStudentData.forEach((s, idx) => {
+                    let h=0, t=0, i=0, sa=0, a=0;
+                    Object.values(attendanceData).forEach(day => {
+                        if(day[idx]) {
+                            const st = day[idx].status;
+                            if(st==='Hadir') h++; else if(st==='Terlambat') t++; else if(st==='Izin') i++; else if(st==='Sakit') sa++; else if(st==='Alpa') a++;
+                        }
+                    });
+                    body.innerHTML += `<tr class="border-b"><td class="p-4">${idx+1}</td><td class="p-4">${s.name}</td><td class="p-4">${h}</td><td class="p-4">${t}</td><td class="p-4">${i}</td><td class="p-4">${sa}</td><td class="p-4">${a}</td></tr>`;
+                });
+            }
+        }
+
+        function closeRecapModal() { document.getElementById('recapModal').classList.add('hidden'); }
+
+        function downloadAction(type) {
+            const data = [];
+            if(type === 'daily') {
+                const key = getDateKey();
+                rawStudentData.forEach((s, idx) => {
+                    const r = (attendanceData[key] || {})[idx] || {};
+                    data.push({ "Nama": s.name, "NISN": s.nisn, "Status": r.status || 'Belum Absen', "Waktu": r.time || '-', "Alasan": r.reason || '-' });
+                });
+            } else {
+                rawStudentData.forEach((s, idx) => {
+                    let h=0, t=0, i=0, sa=0, a=0;
+                    Object.values(attendanceData).forEach(day => {
+                        if(day[idx]) {
+                            const st = day[idx].status;
+                            if(st==='Hadir') h++; else if(st==='Terlambat') t++; else if(st==='Izin') i++; else if(st==='Sakit') sa++; else if(st==='Alpa') a++;
+                        }
+                    });
+                    data.push({ "Nama": s.name, "Hadir": h, "Terlambat": t, "Izin": i, "Sakit": sa, "Alpa": a });
+                });
+            }
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Presensi");
+            XLSX.writeFile(wb, `Presensi_5A_${type}_${new Date().getTime()}.xlsx`);
+        }
+    </script>
+</body>
+</html>
